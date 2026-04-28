@@ -1374,14 +1374,41 @@ const DATA = (() => {
   // ── Meta API: 소재 목록 + 썸네일
   async function loadMetaCreatives(since, until, limit = 100) {
     const key = `meta_creatives_${since}_${until}`;
-    if (_cache[key] && Date.now() - _cache[key].ts < 3600000) return _cache[key].data; // 1시간 캐시
+
+    // localStorage 24시간 캐시 — 매일 아침 6시 이후 첫 요청 시 갱신
+    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+    function isCacheValid(ts) {
+      if (!ts) return false;
+      const now = new Date();
+      const cached = new Date(ts);
+      // 오늘 06:00 기준
+      const refresh = new Date(now);
+      refresh.setHours(6, 0, 0, 0);
+      // 캐시가 24시간 이내이고, 마지막 06:00 이후에 저장된 경우만 유효
+      if (Date.now() - ts > CACHE_TTL) return false;
+      if (now >= refresh && cached < refresh) return false; // 오늘 6시 이후인데 캐시가 그 전
+      return true;
+    }
+
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (isCacheValid(parsed.ts)) return parsed.data;
+      }
+    } catch(e) {}
+
+    // 메모리 캐시도 확인 (탭 내 중복 요청 방지)
+    if (_cache[key] && isCacheValid(_cache[key].ts)) return _cache[key].data;
 
     const params = new URLSearchParams({ action:'meta_creatives', since, until, limit });
     try {
       const res  = await fetch(`${CFG.API_URL}?${params}`);
       const data = await res.json();
       if (data.ads) {
-        _cache[key] = { data, ts: Date.now() };
+        const entry = { data, ts: Date.now() };
+        _cache[key] = entry;
+        try { localStorage.setItem(key, JSON.stringify(entry)); } catch(e) {}
         return data;
       }
       return data;
@@ -3296,10 +3323,10 @@ const UI = (() => {
 
     function insightCard(badge, badgeCls, label, roas, cnt, desc, change) {
       return `<div class="kcard ${badgeCls}">
-        <div><span class="badge ${badgeCls}">${badge}</span></div>
+        <span class="badge ${badgeCls}">${badge}</span>
         <div class="klabel">${label} ROAS</div>
         <div class="kval ${badgeCls}">${roas}%</div>
-        <div class="kdesc ${badgeCls}">${cnt}개 소재 · ${desc}</div>
+        <div class="kdesc ${badgeCls}">${cnt}개 소재</div>
         ${change}
       </div>`;
     }
@@ -3341,7 +3368,25 @@ const UI = (() => {
     if (!document.getElementById('kpi-insight-style')) {
       const s = document.createElement('style');
       s.id = 'kpi-insight-style';
-      s.textContent = `.kcard.green{background:#E1F5EE;border-color:#5DCAA5}.kcard.red{background:#FCEBEB;border-color:#F09595}.kcard.amber{background:#FAEEDA;border-color:#EF9F27}.kcard.gray{background:var(--color-background-secondary)}.badge.green{background:#5DCAA5;color:#04342C}.badge.red{background:#F09595;color:#501313}.badge.amber{background:#EF9F27;color:#412402}.badge.gray{background:#D3D1C7;color:#2C2C2A}.kval.green{color:#085041}.kval.red{color:#791F1F}.kval.amber{color:#633806}.kdesc.green{color:#0F6E56}.kdesc.red{color:#A32D2D}.kdesc.amber{color:#854F0B}.kchange{font-size:11px;font-weight:500;margin-top:6px}.kchange.up{color:#0F6E56}.kchange.down{color:#A32D2D}`;
+      s.textContent = `
+        .kcard{background:var(--surface);border:0.5px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+        .kcard.green{background:#E1F5EE;border:1.5px solid #5DCAA5}
+        .kcard.red{background:#FCEBEB;border:1.5px solid #F09595}
+        .kcard.amber{background:#FAEEDA;border:1.5px solid #EF9F27}
+        .kcard.gray{background:var(--surface2);border:0.5px solid var(--border)}
+        .badge{display:inline-block;font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;margin-bottom:4px;width:fit-content}
+        .badge.green{background:#5DCAA5;color:#04342C}
+        .badge.red{background:#F09595;color:#501313}
+        .badge.amber{background:#EF9F27;color:#412402}
+        .badge.gray{background:#D3D1C7;color:#2C2C2A}
+        .klabel{font-size:11px;color:var(--txt3);font-weight:400}
+        .kval{font-size:26px;font-weight:500;line-height:1.15}
+        .kval.green{color:#085041}.kval.red{color:#791F1F}.kval.amber{color:#633806}
+        .kdesc{font-size:11px;color:var(--txt3)}
+        .kdesc.green{color:#0F6E56}.kdesc.red{color:#A32D2D}.kdesc.amber{color:#854F0B}
+        .kchange{font-size:11px;font-weight:500;margin-top:4px;display:flex;align-items:center;gap:3px}
+        .kchange.up{color:#0F6E56}.kchange.down{color:#A32D2D}
+      `;
       document.head.appendChild(s);
     }
 
