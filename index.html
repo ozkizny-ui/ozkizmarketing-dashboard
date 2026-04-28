@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗝️</text></svg>">
 <title>오즈키즈 마케팅 대시보드</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗝️</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 /* ── 리셋 & 기본 ── */
@@ -3558,7 +3558,7 @@ const UI = (() => {
 
     // 긴급: 광고비 급증 + ROAS 하락
     if (spendGrowth !== null && spendGrowth > 10 && metaRoas < 230) {
-      alerts.push({ type:'red', badge:'긴급', title:`광고비 +${spendGrowth}% 증가 대비 ROAS ${metaRoas}% 하락`, body:`최근 7일 Meta ROAS ${metaRoas}% — 전주 대비 하락. AI영상 소재 CVR 점검 및 저효율 소재 중단 권장.` });
+      alerts.push({ type:'red', badge:'긴급', title:`광고비 +${spendGrowth}% 증가 대비 목표 ROAS 230% 미달 (현재 ${metaRoas}%)`, body:`최근 7일 Meta 광고비 전주 대비 +${spendGrowth}% 증가했으나 ROAS ${metaRoas}%로 목표(230%) 미달. AI영상 소재 CVR 점검 및 저효율 소재 중단 권장.` });
     }
     // 손실: Kakao ROAS < 100
     if (kk7s > 0 && kkRoas < 100) {
@@ -3606,8 +3606,31 @@ const UI = (() => {
         alerts.push({ type:'grn', badge:'인사이트', title:`앱 설치 +${Math.round((avgInst-avgInst25)/avgInst25*100)}% 성장`, body:`최근 7일 평균 설치 ${avgInst}건(전년 대비 성장). 앱매출 비중 ${(avgRatio*100).toFixed(0)}% — ${avgRatio < avgRatio25 ? '전년 대비 하락, 앱 내 구매전환율 개선 필요.' : '유지 중.'}` });
       }
     }
-    // PA 소재
-    alerts.push({ type:'', badge:'정보', title:'오즈맘PA 226개 소재 ROAS 193% — 선별 강화', body:'PA 소재 평균 ROAS 193%로 전 유형 최저. 상위 20% 고ROAS 소재에 예산 집중, 하위 소재 중단 권장.' });
+    // PA 소재 — 실데이터 기반 (7일 Meta 소재 데이터 있을 때)
+    if (_creativeAds7d && _creativeAds7d.length > 0) {
+      const paAds = _creativeAds7d.filter(a => {
+        const n = (a.name || '').toLowerCase();
+        return n.includes('pa_') && n.includes('오즈맘');
+      });
+      if (paAds.length > 0) {
+        const paSpend = paAds.reduce((s,a) => s + (a.spend||0), 0);
+        const paRev   = paAds.reduce((s,a) => s + (a.rev||0), 0);
+        const paRoas  = paSpend > 0 ? Math.round(paRev / paSpend * 100) : 0;
+        const paCnt   = paAds.length;
+        const allSpend = _creativeAds7d.reduce((s,a) => s + (a.spend||0), 0);
+        const allRev   = _creativeAds7d.reduce((s,a) => s + (a.rev||0), 0);
+        const allRoas  = allSpend > 0 ? Math.round(allRev / allSpend * 100) : 0;
+        const isBelowAvg = paRoas < allRoas;
+        alerts.push({
+          type: isBelowAvg ? '' : 'grn',
+          badge: '정보',
+          title: `오즈맘PA ${paCnt}개 소재 ROAS ${paRoas}% — ${isBelowAvg ? '선별 강화' : '평균 상회'}`,
+          body: `PA 소재 평균 ROAS ${paRoas}% (전체 평균 ${allRoas}%). ${isBelowAvg ? '상위 20% 고ROAS 소재에 예산 집중, 하위 소재 중단 권장.' : '효율 양호. 예산 확대 검토 가능.'}`
+        });
+      }
+    } else {
+      alerts.push({ type:'', badge:'정보', title:'오즈맘PA ROAS — 소재 탭에서 확인', body:'Meta 소재 API 데이터 로딩 후 자동 업데이트됩니다. 소재 분석 탭에서 유형별 ROAS를 확인하세요.' });
+    }
 
     // 날짜 표시
     if (r7.length > 0) {
