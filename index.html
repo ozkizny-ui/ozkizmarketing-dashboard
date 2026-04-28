@@ -541,11 +541,11 @@ body[data-adview="ons"] [data-adch="odc"]{display:none !important}
   <div class="page">
     <div class="kg6" id="ad-kpi-row"></div>
 
-    <!-- 시각화 카드: 채널별 ROAS / 매체별 광고비 비중 도넛 -->
+    <!-- 시각화 카드: 월별 매체별 광고비 테이블 / 매체별 광고비 비중 도넛 -->
     <div class="row2eq" style="margin-top:12px">
       <div class="card">
-        <div class="chd"><span class="ct" id="ad-roas-title">채널별 ROAS</span><span class="ctag">최근 7일</span></div>
-        <div class="chart-wrap" style="height:200px"><canvas id="c_ad_roas_top"></canvas></div>
+        <div class="chd"><span class="ct">월별 매체별 광고비</span><span class="ctag" id="ad-monthly-table-tag">월간</span></div>
+        <div id="ad-monthly-spend-table" style="overflow-x:auto;font-size:12px;"></div>
       </div>
       <div class="card">
         <div class="chd"><span class="ct" id="ad-spend-title">자사몰 매체별 광고비</span><span class="ctag">최근 7일</span></div>
@@ -2063,28 +2063,73 @@ const CHARTS = (() => {
   //  광고 성과 탭 — 상단 viz 카드
   // ═══════════════════════════════════════════════════
 
-  // 채널별 ROAS (가로 바)
-  function renderAdRoasTop(labels, roases, colors) {
-    destroy('ad_roas_top');
-    const canvas = document.getElementById('c_ad_roas_top');
-    if (!canvas) return;
-    _instances['ad_roas_top'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: labels,
-        datasets: [{ data: roases, backgroundColor: colors, borderRadius: 4 }],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>ctx.parsed.x+'%'}} },
-        scales: {
-          x: { beginAtZero: true, ticks: { ...TICK_STYLE, callback:v=>v+'%' }, grid: GRID_STYLE },
-          y: { ticks: TICK_STYLE, grid: { display: false } },
-        },
-      },
-    });
+  // 월별 매체별 광고비 테이블
+  function renderMonthlySpendTable(adMonthly, filter) {
+    const el = document.getElementById('ad-monthly-spend-table');
+    if (!el) return;
+    if (!adMonthly || adMonthly.length === 0) { el.innerHTML = '<div style="padding:20px;text-align:center;color:#888">데이터 없음</div>'; return; }
+
+    const channels = filter === 'ons'
+      ? [ { key:'naver', label:'Naver', color:'#1D9E75' } ]
+      : [
+          { key:'meta',   label:'Meta',   color:'#378add' },
+          { key:'google', label:'Google', color:'#f4a535' },
+          { key:'criteo', label:'Criteo', color:'#e06fa0' },
+          { key:'kakao',  label:'Kakao',  color:'#f9cc00' },
+        ];
+
+    const months = adMonthly.slice(-6);
+    const activeChannels = channels.filter(c => months.some(m => (m[c.key]?.spend||0) > 0));
+    const maxSpend = Math.max(...activeChannels.flatMap(c => months.map(m => Math.round((m[c.key]?.spend||0)/10000))));
+
+    const thCells = months.map(m => `<th style="text-align:right;padding:5px 8px;font-size:11px;font-weight:500;color:var(--txt3);border-bottom:1px solid var(--border)">${m.label}</th>`).join('');
+    const totalRow = months.map(m => {
+      const t = activeChannels.reduce((s,c) => s + Math.round((m[c.key]?.spend||0)/10000), 0);
+      return `<td style="text-align:right;padding:5px 8px;font-weight:500;color:var(--txt1)">${t.toLocaleString()}만</td>`;
+    }).join('');
+    const grandTotal = activeChannels.reduce((s,c) => s + months.reduce((ss,m) => ss + Math.round((m[c.key]?.spend||0)/10000),0), 0);
+
+    const dataRows = activeChannels.map(c => {
+      const rowTotal = months.reduce((s,m) => s + Math.round((m[c.key]?.spend||0)/10000), 0);
+      const cells = months.map(m => {
+        const v = Math.round((m[c.key]?.spend||0)/10000);
+        const pct = maxSpend > 0 ? Math.round(v/maxSpend*100) : 0;
+        return `<td style="text-align:right;padding:5px 8px;color:var(--txt1)">
+          <div>${v > 0 ? v.toLocaleString()+'만' : '—'}</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;margin-top:3px">
+            <div style="height:4px;border-radius:2px;width:${pct}%;background:${c.color}"></div>
+          </div>
+        </td>`;
+      }).join('');
+      return `<tr>
+        <td style="padding:5px 8px;white-space:nowrap">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c.color};margin-right:5px"></span>
+          <span style="font-weight:500;color:var(--txt2)">${c.label}</span>
+        </td>
+        ${cells}
+        <td style="text-align:right;padding:5px 8px;font-weight:500;color:var(--txt1)">${rowTotal.toLocaleString()}만</td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:500;color:var(--txt3);border-bottom:1px solid var(--border)">매체</th>
+        ${thCells}
+        <th style="text-align:right;padding:5px 8px;font-size:11px;font-weight:500;color:var(--txt3);border-bottom:1px solid var(--border)">합계</th>
+      </tr></thead>
+      <tbody>
+        ${dataRows}
+        <tr style="background:var(--surface2)">
+          <td style="padding:5px 8px;font-weight:500;color:var(--txt1)">합계</td>
+          ${totalRow}
+          <td style="text-align:right;padding:5px 8px;font-weight:500;color:var(--txt1)">${grandTotal.toLocaleString()}만</td>
+        </tr>
+      </tbody>
+    </table>`;
   }
+
+  // 채널별 ROAS (가로 바) — 레거시, 사용 안 함
+  function renderAdRoasTop(labels, roases, colors) { }
 
   // 채널별 광고비 비중 (도넛 차트, 만원 단위 금액 + 비율)
   function renderAdSpendDonut(labels, spends10k, colors) {
@@ -2109,7 +2154,24 @@ const CHARTS = (() => {
         plugins: {
           legend: {
             position: 'right',
-            labels: { font: { size: 11 }, boxWidth: 12, padding: 8, color: '#444' },
+            labels: {
+              font: { size: 11 }, boxWidth: 12, padding: 8, color: '#444',
+              generateLabels: (chart) => {
+                const data = chart.data;
+                const total = (data.datasets[0]?.data || []).reduce((s,v) => s + v, 0);
+                return (data.labels || []).map((label, i) => {
+                  const v = data.datasets[0]?.data[i] || 0;
+                  const pct = total > 0 ? Math.round(v / total * 100) : 0;
+                  return {
+                    text: `${label}  ${v.toLocaleString()}만 (${pct}%)`,
+                    fillStyle: data.datasets[0]?.backgroundColor[i],
+                    strokeStyle: '#fff',
+                    lineWidth: 2,
+                    index: i,
+                  };
+                });
+              },
+            },
           },
           tooltip: {
             callbacks: {
@@ -2164,7 +2226,7 @@ const CHARTS = (() => {
     renderDailyBizWeek, renderDailyBizYear, renderMonthlyYoY, renderMonthlyTacos, renderCvrTrend,
     renderTacosTrendOdc, renderTacosTrendSs,
     renderVisCompose, renderNewVisRate, renderNewMember,
-    renderAdRoasTop, renderAdSpendDonut, renderCampMini,
+    renderAdRoasTop, renderMonthlySpendTable, renderAdSpendDonut, renderCampMini,
     destroyAll,
   };
 })();
@@ -2990,7 +3052,7 @@ const UI = (() => {
     const titleEl = document.getElementById('ad-spend-title');
     if (titleEl) titleEl.textContent = spendTitle;
 
-    CHARTS.renderAdRoasTop(roasLabels, roasValues, roasColors);
+    CHARTS.renderMonthlySpendTable(d.adMonthly, filter);
     CHARTS.renderAdSpendDonut(spendLabels, spendValues, spendColors);
   }
 
