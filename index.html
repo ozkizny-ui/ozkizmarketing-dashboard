@@ -3239,32 +3239,113 @@ const UI = (() => {
     ).join('');
   }
 
-  // ── KPI 카드 실데이터 업데이트
-  function _renderCreativeKpi(ads) {
+  // ── KPI 카드 — 인사이트 기반 (전주 대비 변화 감지)
+  function _renderCreativeKpi(ads, prevAds) {
     if (!ads || ads.length === 0) return;
-    function typeStats(filterFn) {
-      const filtered = ads.filter(a => filterFn(a.name || ''));
-      const spend = filtered.reduce((s,a) => s+(a.spend||0), 0);
-      const rev   = filtered.reduce((s,a) => s+(a.rev||0), 0);
-      const roas  = spend > 0 ? Math.round(rev/spend*100) : 0;
-      return { cnt: filtered.length, roas };
+    prevAds = prevAds || [];
+
+    const TYPES = [
+      { key:'오즈맘PA',   filter: n => n.toLowerCase().includes('pa_') && n.includes('오즈맘') },
+      { key:'라방숏클립', filter: n => n.includes('라방숏클립') },
+      { key:'AI영상',     filter: n => n.includes('ai영상') },
+      { key:'AI이미지',   filter: n => n.includes('ai이미지') && !n.includes('ai모델') },
+      { key:'AI모델',     filter: n => n.includes('ai모델이미지') },
+      { key:'브이캣',     filter: n => n.includes('브이캣') },
+      { key:'후기사진',   filter: n => n.includes('후기사진') },
+      { key:'컨셉사진',   filter: n => n.includes('컨셉사진') || n.includes('컨셉이미지') },
+    ];
+
+    function typeStats(adList, filterFn) {
+      const f = adList.filter(a => filterFn(a.name || ''));
+      const spend = f.reduce((s,a) => s+(a.spend||0), 0);
+      const rev   = f.reduce((s,a) => s+(a.rev||0), 0);
+      return { cnt:f.length, spend, rev, roas: spend>0 ? Math.round(rev/spend*100) : 0 };
     }
-    const pa      = typeStats(n => n.toLowerCase().includes('pa_') && n.includes('오즈맘'));
-    const lb      = typeStats(n => n.includes('라방숏클립'));
-    const ai      = typeStats(n => n.includes('ai영상'));
-    const review  = typeStats(n => n.includes('후기사진'));
 
-    const paLabel  = pa.roas >= 200  ? '효율 양호' : '효율 개선 필요';
-    const lbLabel  = lb.roas >= 250  ? '효율+규모 최적' : lb.roas >= 150 ? '효율 양호' : '효율 점검 필요';
-    const aiLabel  = ai.roas >= 250  ? '볼륨 1위 · 효율 우수' : '볼륨 1위';
-    const rvLabel  = review.cnt < 10 ? '소재 추가 필요' : '효율 양호';
+    const stats = TYPES.map(t => ({
+      key: t.key,
+      cur:  typeStats(ads,     t.filter),
+      prev: typeStats(prevAds, t.filter),
+    })).filter(t => t.cur.cnt > 0 || t.prev.cnt > 0);
 
-    document.getElementById('creative-kpi').innerHTML = [
-      review.cnt > 0 ? kpiCard('후기사진 ROAS', review.roas+'%', `${review.cnt}개 소재 · ${rvLabel}`, review.roas >= 300 ? 'ok' : '') : kpiCard('후기사진 ROAS', '412%', '6개 소재 · 소재 추가 필요', 'ok'),
-      lb.cnt > 0     ? kpiCard('라방숏클립 ROAS', lb.roas+'%',  `${lb.cnt}개 · ${lbLabel}`, lb.roas >= 250 ? 'ok' : '')     : kpiCard('라방숏클립 ROAS', '257%', '43개 · 효율+규모 최적', 'ok'),
-      ai.cnt > 0     ? kpiCard('AI영상 ROAS', ai.roas+'%',      `${ai.cnt}개 · ${aiLabel}`, '')                             : kpiCard('AI영상 ROAS', '216%', '79개 · 볼륨 1위', ''),
-      pa.cnt > 0     ? kpiCard('오즈맘PA ROAS', pa.roas+'%',    `${pa.cnt}개 · ${paLabel}`, pa.roas >= 200 ? '' : 'hint')   : kpiCard('오즈맘PA ROAS', '193%', '226개 · 효율 개선 필요', 'hint'),
-    ].join('');
+    // 인사이트 카드 선정
+    const active = stats.filter(t => t.cur.spend > 0);
+    if (active.length === 0) return;
+
+    // 1. 효율 1위 — 이번주 ROAS 최고
+    const top1 = [...active].sort((a,b) => b.cur.roas - a.cur.roas)[0];
+    // 2. 주의 — 전주 대비 ROAS 가장 많이 하락 (전주 데이터 있는 것만)
+    const withPrev = active.filter(t => t.prev.spend > 0);
+    const topDrop = withPrev.length > 0
+      ? [...withPrev].sort((a,b) => (a.cur.roas - a.prev.roas) - (b.cur.roas - b.prev.roas))[0]
+      : null;
+    // 3. 볼륨 1위 — 광고비 최다
+    const topSpend = [...active].sort((a,b) => b.cur.spend - a.cur.spend)[0];
+    // 4. 예산 점검 — 광고비 상위 50% 중 ROAS 가장 낮은 것
+    const spendMed = active.map(t=>t.cur.spend).sort((a,b)=>b-a)[Math.floor(active.length/2)] || 0;
+    const highSpendLowRoas = [...active].filter(t => t.cur.spend >= spendMed && t.key !== top1.key)
+      .sort((a,b) => a.cur.roas - b.cur.roas)[0];
+
+    function changeText(cur, prev) {
+      if (!prev || prev.spend === 0) return '';
+      const diff = cur.roas - prev.roas;
+      const arrow = diff >= 0 ? '▲' : '▼';
+      const cls = diff >= 0 ? 'up' : 'down';
+      return `<div class="kchange ${cls}">${arrow} 전주 ${prev.roas}% → ${cur.roas}%</div>`;
+    }
+
+    function insightCard(badge, badgeCls, label, roas, cnt, desc, change) {
+      return `<div class="kcard ${badgeCls}">
+        <div><span class="badge ${badgeCls}">${badge}</span></div>
+        <div class="klabel">${label} ROAS</div>
+        <div class="kval ${badgeCls}">${roas}%</div>
+        <div class="kdesc ${badgeCls}">${cnt}개 소재 · ${desc}</div>
+        ${change}
+      </div>`;
+    }
+
+    const cards = [];
+
+    // 카드 1: 효율 1위
+    cards.push(insightCard('효율 1위', 'green', top1.key, top1.cur.roas, top1.cur.cnt,
+      '이번주 최고 효율', changeText(top1.cur, top1.prev)));
+
+    // 카드 2: 주의 (전주 대비 급락)
+    if (topDrop && topDrop.key !== top1.key && (topDrop.cur.roas - topDrop.prev.roas) < -20) {
+      cards.push(insightCard('주의', 'red', topDrop.key, topDrop.cur.roas, topDrop.cur.cnt,
+        '전주 대비 효율 하락', changeText(topDrop.cur, topDrop.prev)));
+    } else {
+      // 주의 대상 없으면 ROAS 최저 유형
+      const lowest = [...active].filter(t=>t.key!==top1.key).sort((a,b)=>a.cur.roas-b.cur.roas)[0];
+      if (lowest) cards.push(insightCard('효율 점검', 'red', lowest.key, lowest.cur.roas, lowest.cur.cnt,
+        '이번주 최저 효율', changeText(lowest.cur, lowest.prev)));
+    }
+
+    // 카드 3: 볼륨 1위
+    const volDesc = topSpend.cur.roas >= 200 ? '광고비 최다 · 효율 양호' : '광고비 최다 · 효율 점검';
+    const volCls  = topSpend.cur.roas >= 200 ? 'gray' : 'amber';
+    cards.push(insightCard('볼륨 1위', volCls, topSpend.key, topSpend.cur.roas, topSpend.cur.cnt,
+      volDesc, changeText(topSpend.cur, topSpend.prev)));
+
+    // 카드 4: 예산 점검
+    if (highSpendLowRoas && highSpendLowRoas.key !== topSpend.key) {
+      cards.push(insightCard('예산 점검', 'amber', highSpendLowRoas.key, highSpendLowRoas.cur.roas,
+        highSpendLowRoas.cur.cnt, '광고비 대비 저효율', changeText(highSpendLowRoas.cur, highSpendLowRoas.prev)));
+    } else {
+      const fourth = active.find(t => ![top1.key, topSpend.key].includes(t.key) && cards.every(c=>!c.includes(`>${t.key} ROAS`)));
+      if (fourth) cards.push(insightCard('참고', 'gray', fourth.key, fourth.cur.roas, fourth.cur.cnt,
+        '집행 중', changeText(fourth.cur, fourth.prev)));
+    }
+
+    // CSS 주입 (한번만)
+    if (!document.getElementById('kpi-insight-style')) {
+      const s = document.createElement('style');
+      s.id = 'kpi-insight-style';
+      s.textContent = `.kcard.green{background:#E1F5EE;border-color:#5DCAA5}.kcard.red{background:#FCEBEB;border-color:#F09595}.kcard.amber{background:#FAEEDA;border-color:#EF9F27}.kcard.gray{background:var(--color-background-secondary)}.badge.green{background:#5DCAA5;color:#04342C}.badge.red{background:#F09595;color:#501313}.badge.amber{background:#EF9F27;color:#412402}.badge.gray{background:#D3D1C7;color:#2C2C2A}.kval.green{color:#085041}.kval.red{color:#791F1F}.kval.amber{color:#633806}.kdesc.green{color:#0F6E56}.kdesc.red{color:#A32D2D}.kdesc.amber{color:#854F0B}.kchange{font-size:11px;font-weight:500;margin-top:6px}.kchange.up{color:#0F6E56}.kchange.down{color:#A32D2D}`;
+      document.head.appendChild(s);
+    }
+
+    document.getElementById('creative-kpi').innerHTML = cards.slice(0,4).join('');
   }
 
   // ── 소재 분석 탭 (Meta API 연동 + 썸네일, API 없으면 정적 표시)
@@ -3307,7 +3388,10 @@ const UI = (() => {
 
     // API 성공 시 7일 집계 데이터로 테이블 + KPI 카드 업데이트
     _renderCreativeStatic(result.ads);
-    _renderCreativeKpi(result.ads);
+
+    // 전주 데이터도 로드해서 인사이트 카드에 활용
+    const prevResult = await DATA.loadMetaCreatives(DATA.daysAgo(14), DATA.daysAgo(7), 100);
+    _renderCreativeKpi(result.ads, prevResult.ads || []);
     _renderCreativeWithThumbs(result.ads);
   }
 
