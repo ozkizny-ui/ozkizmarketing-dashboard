@@ -462,13 +462,14 @@ body[data-adview="ons"] [data-adch="odc"]{display:none !important}
         </div>
         <div class="card">
           <div class="chd">
-            <span class="ct">월별 TACOS 추이</span>
+            <span class="ct">월별 TACOS · ROAS 추이</span>
             <span class="ctag" style="color:#666">목표 30%</span>
           </div>
           <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:var(--txt2);flex-wrap:wrap">
             <span><span style="display:inline-block;width:10px;height:2px;background:#1D9E75;vertical-align:middle;margin-right:3px"></span>올해 TACOS</span>
             <span><span class="lgnd-mark dashed" style="border-color:#888;display:inline-block;width:14px;margin-right:3px"></span>작년 TACOS</span>
             <span><span class="lgnd-mark dashed" style="border-color:rgba(0,0,0,0.5);display:inline-block;width:14px;margin-right:3px"></span>목표 30%</span>
+            <span><span style="display:inline-block;width:10px;height:2px;background:#378add;vertical-align:middle;margin-right:3px"></span>올해 ROAS (우축)</span>
           </div>
           <div class="chart-wrap" style="height:220px"><canvas id="c_biz_monthly_tacos"></canvas></div>
         </div>
@@ -1692,13 +1693,13 @@ const CHARTS = (() => {
       data: {
         labels: DOW_LABELS,
         datasets: [
-          { type:'bar', label:'이번주 매출', yAxisID:'y',
+          { type:'bar', label:'이번주 매출', yAxisID:'y', order:2,
             data: cArr.map(r => Math.round((r?.sales26 || 0) / 10000)),
             backgroundColor:'#1d9e75', borderRadius:4 },
-          { type:'bar', label:'지난주 매출', yAxisID:'y',
+          { type:'bar', label:'지난주 매출', yAxisID:'y', order:3,
             data: pArr.map(r => Math.round((r?.sales26 || 0) / 10000)),
             backgroundColor:'#378add', borderRadius:4 },
-          { type:'line', label:'이번주 광고비', yAxisID:'y2',
+          { type:'line', label:'이번주 광고비', yAxisID:'y2', order:1,
             data: cArr.map(r => Math.round((r?.adCost26 || 0) / 10000)),
             borderColor:'rgba(226,75,74,.85)', backgroundColor:'rgba(226,75,74,.15)',
             tension:0.3, pointRadius:3 },
@@ -1727,13 +1728,13 @@ const CHARTS = (() => {
       data: {
         labels: DOW_LABELS,
         datasets: [
-          { type:'bar', label:'올해 매출', yAxisID:'y',
+          { type:'bar', label:'올해 매출', yAxisID:'y', order:2,
             data: cArr.map(r => Math.round((r?.sales26 || 0) / 10000)),
             backgroundColor:'#1d9e75', borderRadius:4 },
-          { type:'bar', label:'작년 매출', yAxisID:'y',
+          { type:'bar', label:'작년 매출', yAxisID:'y', order:3,
             data: yArr.map(r => Math.round((r?.sales25 || 0) / 10000)),
             backgroundColor:'#bbb', borderRadius:4 },
-          { type:'line', label:'올해 광고비', yAxisID:'y2',
+          { type:'line', label:'올해 광고비', yAxisID:'y2', order:1,
             data: cArr.map(r => Math.round((r?.adCost26 || 0) / 10000)),
             borderColor:'rgba(226,75,74,.85)', backgroundColor:'rgba(226,75,74,.15)',
             tension:0.3, pointRadius:3 },
@@ -1767,14 +1768,14 @@ const CHARTS = (() => {
       data: {
         labels,
         datasets: [
-          { type:'bar', label:'올해 매출', yAxisID:'y',
+          { type:'bar', label:'올해 매출', yAxisID:'y', order:3,
             data: cur,  backgroundColor:'#1D9E75', borderRadius:4 },
-          { type:'bar', label:'작년 매출', yAxisID:'y',
+          { type:'bar', label:'작년 매출', yAxisID:'y', order:4,
             data: prev, backgroundColor:'#D3D1C7', borderRadius:4 },
-          { type:'line', label:'올해 광고비', yAxisID:'y2',
+          { type:'line', label:'올해 광고비', yAxisID:'y2', order:1,
             data: cost, borderColor:'#E24B4A', backgroundColor:'rgba(226,75,74,.12)',
             tension:0.3, pointRadius:3, borderWidth:2, spanGaps:true },
-          { type:'line', label:'작년 광고비', yAxisID:'y2',
+          { type:'line', label:'작년 광고비', yAxisID:'y2', order:2,
             data: cost25, borderColor:'#E24B4A', backgroundColor:'transparent',
             borderDash:[5,3], borderWidth:1.5,
             tension:0.3, pointRadius:2, spanGaps:true },
@@ -1795,15 +1796,16 @@ const CHARTS = (() => {
     });
   }
 
-  // 월별 TACOS 추이 (올해 vs 작년 vs 목표 30%) — 12개월 라인
-  //   months26: [{sales, sales25, adCost, adCost25} | null] 길이 12
+  // 월별 TACOS + ROAS 추이 (올해 vs 작년 vs 목표 30%) — 12개월 라인
+  //   months26: [{sales, sales25, adCost, adCost25, adSales, adSales25} | null] 길이 12
   function renderMonthlyTacos(months26) {
     destroy('biz_monthly_tacos');
     const canvas = document.getElementById('c_biz_monthly_tacos');
     if (!canvas) return;
     const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-    const tacosCur = months26.map(m => (m && m.sales   > 0) ? +(m.adCost   / m.sales   * 100).toFixed(2) : null);
-    const tacosLy  = months26.map(m => (m && m.sales25 > 0) ? +(m.adCost25 / m.sales25 * 100).toFixed(2) : null);
+    const tacosCur = months26.map(m => (m && m.sales   > 0) ? +(m.adCost   / m.sales   * 100).toFixed(1) : null);
+    const tacosLy  = months26.map(m => (m && m.sales25 > 0) ? +(m.adCost25 / m.sales25 * 100).toFixed(1) : null);
+    const roas26   = months26.map(m => (m && m.adCost  > 0) ? Math.round(m.adSales  / m.adCost  * 100) : null);
     const target   = labels.map(() => 30);
     _instances['biz_monthly_tacos'] = new Chart(canvas, {
       type: 'line',
@@ -1812,28 +1814,34 @@ const CHARTS = (() => {
         datasets: [
           { label:'올해 TACOS',
             data: tacosCur,
-            borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,.10)',
-            borderWidth:2.5, tension:0.3, pointRadius:3, spanGaps:true },
+            borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,.08)',
+            borderWidth:2.5, tension:0.3, pointRadius:3, spanGaps:true, yAxisID:'y' },
           { label:'작년 TACOS',
             data: tacosLy,
             borderColor:'#D3D1C7', backgroundColor:'transparent',
-            borderDash:[4,3], borderWidth:1.8, tension:0.3, pointRadius:2, spanGaps:true },
+            borderDash:[4,3], borderWidth:1.8, tension:0.3, pointRadius:2, spanGaps:true, yAxisID:'y' },
           { label:'목표 30%',
             data: target,
-            borderColor:'rgba(0,0,0,0.5)', backgroundColor:'transparent',
-            borderDash:[6,3], borderWidth:1.5, pointRadius:0 },
+            borderColor:'rgba(0,0,0,0.35)', backgroundColor:'transparent',
+            borderDash:[6,3], borderWidth:1.5, pointRadius:0, yAxisID:'y' },
+          { label:'올해 ROAS',
+            data: roas26,
+            borderColor:'#378add', backgroundColor:'rgba(55,138,221,.08)',
+            borderWidth:2.5, tension:0.3, pointRadius:3, spanGaps:true, yAxisID:'y2' },
         ],
       },
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins: {
           legend:{ display:false },
-          tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${ctx.raw == null ? '—' : ctx.raw + '%'}` } },
+          tooltip:{ callbacks:{ label: ctx => ctx.raw == null ? null : ` ${ctx.dataset.label}: ${ctx.raw}%` } },
         },
         scales: {
           x:{ grid:{ display:false }, ticks:TICK_STYLE },
-          y:{ grid:GRID_STYLE, min:20, max:50,
-              ticks:{ ...TICK_STYLE, callback:v => v + '%' } },
+          y:{ position:'left', grid:GRID_STYLE, min:20, max:50,
+              ticks:{ ...TICK_STYLE, color:'#1D9E75', callback:v => v + '%' } },
+          y2:{ position:'right', grid:{ display:false }, min:100, max:500,
+               ticks:{ ...TICK_STYLE, color:'#378add', callback:v => v + '%' } },
         },
       },
     });
@@ -1981,13 +1989,13 @@ const CHARTS = (() => {
       data: {
         labels: labels,
         datasets: [
-          { type:'bar', label:'오가닉', stack:'v',
+          { type:'bar', label:'오가닉', stack:'v', order:2,
             data: rows14.map(r => Math.max((r.uv26 || 0) - (r.adUv26 || 0), 0)),
             backgroundColor:'#1d9e75', borderRadius:3 },
-          { type:'bar', label:'광고유입', stack:'v',
+          { type:'bar', label:'광고유입', stack:'v', order:3,
             data: rows14.map(r => r.adUv26 || 0),
             backgroundColor:'#378add', borderRadius:3 },
-          { type:'line', label:'작년 순방문',
+          { type:'line', label:'작년 순방문', order:1,
             data: rows14.map(r => r.uv25 || null),
             borderColor:'#999', backgroundColor:'transparent', borderDash:[4,3], tension:0.2, pointRadius:2 },
         ],
@@ -2198,10 +2206,10 @@ const CHARTS = (() => {
         labels: payload.labels,
         datasets: [
           { type:'bar', data: payload.spends, backgroundColor: payload.colors, borderRadius: 2,
-            yAxisID:'y', label:'광고비(만)' },
+            yAxisID:'y', label:'광고비(만)', order:2 },
           { type:'line', data: payload.roases, borderColor: accent || '#dc2626',
             backgroundColor: 'transparent', tension: 0.3, pointRadius: 1.5, borderWidth: 1.5,
-            yAxisID: 'y2', label: 'ROAS(%)' },
+            yAxisID: 'y2', label: 'ROAS(%)', order:1 },
         ],
       },
       options: {
@@ -3921,11 +3929,13 @@ const UI = (() => {
     (rows || []).forEach(r => {
       if (!r.date || r.date.getFullYear() !== year) return;
       const m = r.date.getMonth();
-      if (!result[m]) result[m] = { sales:0, sales25:0, adCost:0, adCost25:0 };
-      result[m].sales    += r.netSales26 || 0;
-      result[m].sales25  += r.netSales25 || 0;
-      result[m].adCost   += r.adCost26   || 0;
-      result[m].adCost25 += r.adCost25   || 0;
+      if (!result[m]) result[m] = { sales:0, sales25:0, adCost:0, adCost25:0, adSales:0, adSales25:0 };
+      result[m].sales     += r.netSales26  || 0;
+      result[m].sales25   += r.netSales25  || 0;
+      result[m].adCost    += r.adCost26    || 0;
+      result[m].adCost25  += r.adCost25    || 0;
+      result[m].adSales   += r.adSales26   || 0;
+      result[m].adSales25 += r.adSales25   || 0;
     });
     return result;
   }
