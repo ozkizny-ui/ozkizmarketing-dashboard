@@ -3239,6 +3239,34 @@ const UI = (() => {
     ).join('');
   }
 
+  // ── KPI 카드 실데이터 업데이트
+  function _renderCreativeKpi(ads) {
+    if (!ads || ads.length === 0) return;
+    function typeStats(filterFn) {
+      const filtered = ads.filter(a => filterFn(a.name || ''));
+      const spend = filtered.reduce((s,a) => s+(a.spend||0), 0);
+      const rev   = filtered.reduce((s,a) => s+(a.rev||0), 0);
+      const roas  = spend > 0 ? Math.round(rev/spend*100) : 0;
+      return { cnt: filtered.length, roas };
+    }
+    const pa      = typeStats(n => n.toLowerCase().includes('pa_') && n.includes('오즈맘'));
+    const lb      = typeStats(n => n.includes('라방숏클립'));
+    const ai      = typeStats(n => n.includes('ai영상'));
+    const review  = typeStats(n => n.includes('후기사진'));
+
+    const paLabel  = pa.roas >= 200  ? '효율 양호' : '효율 개선 필요';
+    const lbLabel  = lb.roas >= 250  ? '효율+규모 최적' : lb.roas >= 150 ? '효율 양호' : '효율 점검 필요';
+    const aiLabel  = ai.roas >= 250  ? '볼륨 1위 · 효율 우수' : '볼륨 1위';
+    const rvLabel  = review.cnt < 10 ? '소재 추가 필요' : '효율 양호';
+
+    document.getElementById('creative-kpi').innerHTML = [
+      review.cnt > 0 ? kpiCard('후기사진 ROAS', review.roas+'%', `${review.cnt}개 소재 · ${rvLabel}`, review.roas >= 300 ? 'ok' : '') : kpiCard('후기사진 ROAS', '412%', '6개 소재 · 소재 추가 필요', 'ok'),
+      lb.cnt > 0     ? kpiCard('라방숏클립 ROAS', lb.roas+'%',  `${lb.cnt}개 · ${lbLabel}`, lb.roas >= 250 ? 'ok' : '')     : kpiCard('라방숏클립 ROAS', '257%', '43개 · 효율+규모 최적', 'ok'),
+      ai.cnt > 0     ? kpiCard('AI영상 ROAS', ai.roas+'%',      `${ai.cnt}개 · ${aiLabel}`, '')                             : kpiCard('AI영상 ROAS', '216%', '79개 · 볼륨 1위', ''),
+      pa.cnt > 0     ? kpiCard('오즈맘PA ROAS', pa.roas+'%',    `${pa.cnt}개 · ${paLabel}`, pa.roas >= 200 ? '' : 'hint')   : kpiCard('오즈맘PA ROAS', '193%', '226개 · 효율 개선 필요', 'hint'),
+    ].join('');
+  }
+
   // ── 소재 분석 탭 (Meta API 연동 + 썸네일, API 없으면 정적 표시)
   async function renderCreativeTab() {
     document.getElementById('creative-kpi').innerHTML = [
@@ -3277,8 +3305,9 @@ const UI = (() => {
       return;
     }
 
-    // API 성공 시 7일 집계 데이터로 테이블 업데이트
+    // API 성공 시 7일 집계 데이터로 테이블 + KPI 카드 업데이트
     _renderCreativeStatic(result.ads);
+    _renderCreativeKpi(result.ads);
     _renderCreativeWithThumbs(result.ads);
   }
 
