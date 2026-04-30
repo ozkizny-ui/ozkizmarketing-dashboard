@@ -1375,19 +1375,10 @@ const DATA = (() => {
   async function loadMetaCreatives(since, until, limit = 100) {
     const key = `meta_creatives_${since}_${until}`;
 
-    // localStorage 24시간 캐시 — 매일 아침 6시 이후 첫 요청 시 갱신
-    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+    // localStorage 영구 캐시 — API 호출 성공 시에만 갱신, 캐시 있으면 항상 유지
     function isCacheValid(ts) {
       if (!ts) return false;
-      const now = new Date();
-      const cached = new Date(ts);
-      // 오늘 06:00 기준
-      const refresh = new Date(now);
-      refresh.setHours(6, 0, 0, 0);
-      // 캐시가 24시간 이내이고, 마지막 06:00 이후에 저장된 경우만 유효
-      if (Date.now() - ts > CACHE_TTL) return false;
-      if (now >= refresh && cached < refresh) return false; // 오늘 6시 이후인데 캐시가 그 전
-      return true;
+      return true; // 캐시가 존재하면 항상 유효 (새로고침 버튼으로만 강제 갱신)
     }
 
     try {
@@ -4491,6 +4482,8 @@ const UI = (() => {
 
   // ── 강제 새로고침
   window.refreshData = async function() {
+    // Meta 크리에이티브 캐시 초기화 (새로고침 시에만 새 데이터 호출)
+    Object.keys(localStorage).filter(k => k.startsWith('meta_creatives')).forEach(k => localStorage.removeItem(k));
     _data = null;
     _dauChartBuilt = false;
     CHARTS.destroyAll();
